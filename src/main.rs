@@ -1,3 +1,4 @@
+use anyhow::{Context, Result};
 use clap::Parser;
 use std::fmt;
 use std::fs;
@@ -25,25 +26,28 @@ impl fmt::Debug for Cli {
     }
 }
 
-fn file_exists(file_path: &std::path::PathBuf) -> io::Result<()> {
-    let metadata = fs::metadata(file_path)?;
-    if !metadata.is_file(){
+fn file_exists(file_path: &std::path::PathBuf) -> Result<()> {
+    let metadata = fs::metadata(file_path)
+        .with_context(|| format!("Invalid file `{}`", file_path.to_string_lossy()))?;
+
+    if !metadata.is_file() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             "The path is not a file",
-        ));
+        ))
+        .with_context(|| format!("Invalid file `{}`", file_path.to_string_lossy()));
     }
     Ok(())
 }
 
-fn validate_arguments(args: &Cli) -> io::Result<()> {
+fn validate_arguments(args: &Cli) -> Result<()> {
     file_exists(&args.player_file)?;
     file_exists(&args.question_file)?;
     file_exists(&args.output_file)?;
     Ok(())
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<()> {
     // Parse arguments
     let args = Cli::parse();
     println!("{:?}", args);

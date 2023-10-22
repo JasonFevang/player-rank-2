@@ -3,6 +3,7 @@ use clap::Parser;
 use std::fmt;
 use std::fs;
 use std::io;
+use log::trace;
 
 // The triple-slash comments can be read by Rust's procedural macros and are used to populate the help message. That's  crazy
 /// This command is used to determine relative player rankings through a series of questions comparing two players' abilities. Provide a list of player's names to begin
@@ -41,6 +42,7 @@ fn file_exists(file_path: &std::path::PathBuf) -> Result<()> {
 }
 
 fn validate_arguments(args: &Cli) -> Result<()> {
+    trace!("Validating arguments");
     file_exists(&args.player_file)?;
     file_exists(&args.question_file)?;
     file_exists(&args.output_file)?;
@@ -48,7 +50,10 @@ fn validate_arguments(args: &Cli) -> Result<()> {
 }
 
 fn main() -> Result<()> {
+    env_logger::init();
     // Parse arguments
+
+    trace!("Parsing arguments");
     let args = Cli::parse();
     println!("{:?}", args);
 

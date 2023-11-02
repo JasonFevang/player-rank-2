@@ -56,15 +56,9 @@ fn run_ranking() -> Result<player_rank_lib::Ranks> {
     Ok(player_rank_lib::Ranks::new())
 }
 
-fn main() -> Result<()> {
-    env_logger::init();
-
-    trace!("Parsing arguments");
-    let args = Cli::parse();
-
+fn run(args: Cli) ->Result<()>{
     validate_arguments(&args)?;
     println!("{:?}", args);
-
     // Convert files into their respective structs
     let players = cli_file_io::parse_player_file(&args.player_file);
     let questions = cli_file_io::parse_question_file(&args.player_file);
@@ -79,5 +73,16 @@ fn main() -> Result<()> {
     // Write the outputs back to file
     cli_file_io::write_question_file(&args.question_file, &questions)?;
     cli_file_io::write_rank_file(&args.output_file, &ranks)?;
+    Ok(())
+}
+
+fn main() -> Result<()> {
+    env_logger::init();
+
+    trace!("Parsing arguments");
+    let args = Cli::parse();
+
+    run(args)?;
+
     Ok(())
 }

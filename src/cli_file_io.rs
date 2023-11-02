@@ -1,15 +1,38 @@
 use anyhow::Result;
+use std::fs::File;
+use csv;
+use serde::Deserialize;
+
 use crate::player_rank_lib;
 
-pub fn parse_player_file(_player_file: &std::path::PathBuf) -> player_rank_lib::Players {
+// By default, struct field names are deserialized based on the position of
+// a corresponding field in the CSV data's header record.
+#[derive(Debug, Deserialize)]
+struct ParsedPlayer {
+    name: String,
+    goalie: bool,
+    week1: bool,
+    week2: bool,
+}
+
+pub fn parse_player_file(player_file: &std::path::PathBuf) -> Result<player_rank_lib::Players> {
     let mut players = player_rank_lib::Players::new();
-    players.players.push(player_rank_lib::Player {
-        name: String::from("Jason"),
-        goalie: true,
-        avail1: true,
-        avail2: true,
-    });
-    players
+
+    let file = File::open(player_file)?;
+    let mut rdr = csv::Reader::from_reader(file);
+    for result in rdr.deserialize() {
+        // Must provide a type hint for automatic deserialization.
+        let player: ParsedPlayer = result?;
+
+        // Add the parsed player to the list of players
+        players.players.push(player_rank_lib::Player {
+            name: (player.name),
+            goalie: (player.goalie),
+            avail1: (player.week1),
+            avail2: (player.week2),
+        });
+    }
+    Ok(players)
 }
 
 pub fn parse_question_file(_question_file: &std::path::PathBuf) -> player_rank_lib::Questions {

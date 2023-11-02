@@ -61,7 +61,7 @@ pub fn run(args: Cli) ->Result<()>{
     validate_arguments(&args)?;
     println!("{:?}", args);
     // Convert files into their respective structs
-    let players = cli_file_io::parse_player_file(&args.player_file);
+    let players = cli_file_io::parse_player_file(&args.player_file)?;
     let questions = cli_file_io::parse_question_file(&args.player_file);
 
     // Print parsed players

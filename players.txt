@@ -1,0 +1,6 @@
+name,goalie,week1,week2
+Player1 Name,true,true,false
+Player2 Name,true,true,true
+Player3 Name,true,false,true
+Player4 Name,true,true,true
+Player5 Name,true,true,false

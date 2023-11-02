@@ -1,0 +1,5 @@
+player1,player1_pos,player2,player2_pos,skill_factor
+Player1Name,Atk,Player2Name,Atk,1.25
+Player1Name,Def,Player3Name,Def,0.85
+Player1Name,Goalie,Player4Name,Goalie,1.7
+Player2Name,Atk,Player3Name,Atk,2.1

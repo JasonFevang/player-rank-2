@@ -32,12 +32,14 @@ impl Players {
     }
 }
 
+#[derive(Debug)]
 pub enum Position {
     Atk,
     Def,
     Goalie,
 }
 
+#[derive(Debug)]
 pub struct Question {
     pub player1: String,
     pub pos1: Position,
@@ -45,6 +47,7 @@ pub struct Question {
     pub pos2: Position,
 }
 
+#[derive(Debug)]
 pub struct AnsweredQuestion {
     pub question: Question,
     pub response: f64,

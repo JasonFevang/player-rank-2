@@ -62,11 +62,15 @@ pub fn run(args: Cli) ->Result<()>{
     println!("{:?}", args);
     // Convert files into their respective structs
     let players = cli_file_io::parse_player_file(&args.player_file)?;
-    let questions = cli_file_io::parse_question_file(&args.player_file);
+    let questions = cli_file_io::parse_question_file(&args.question_file)?;
 
     // Print parsed players
     for player in &players.players {
         println!("{:?}", player);
+    }
+    // Print parsed players
+    for question in &questions.questions {
+        println!("{:?}", question);
     }
 
     let ranks = run_ranking()?;

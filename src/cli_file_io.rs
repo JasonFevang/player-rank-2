@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use csv;
-use serde::Deserialize;
-use std::fs::File;
+use serde::{Deserialize, Serialize};
+use std::fs::{File, OpenOptions};
 use std::io;
 
 use crate::player_rank_lib;
@@ -38,7 +38,7 @@ pub fn parse_player_file(player_file: &std::path::PathBuf) -> Result<player_rank
 
 // By default, struct field names are deserialized based on the position of
 // a corresponding field in the CSV data's header record.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct ParsedQuestion {
     player1: String,
     player1_pos: String,
@@ -57,10 +57,18 @@ impl player_rank_lib::Position {
             _ => None, // Handle unrecognized strings
         }
     }
+
+    fn to_str(&self) -> String {
+        match self {
+            player_rank_lib::Position::Atk => String::from("Atk"),
+            player_rank_lib::Position::Def => String::from("Def"),
+            player_rank_lib::Position::Goalie => String::from("Goalie"),
+        }
+    }
 }
 
 // Convert a string to a position enum, handling errors
-fn string_to_position(pos_string: &str) -> Result<player_rank_lib::Position>{
+fn string_to_position(pos_string: &str) -> Result<player_rank_lib::Position> {
     match player_rank_lib::Position::from_str(pos_string) {
         Some(pos) => Ok(pos),
         None => {
@@ -99,9 +107,27 @@ pub fn parse_question_file(
 }
 
 pub fn write_question_file(
-    _file: &std::path::PathBuf,
-    _questions: &player_rank_lib::Questions,
+    question_file: &std::path::PathBuf,
+    questions: &player_rank_lib::Questions,
 ) -> Result<()> {
+    let file = OpenOptions::new()
+        .write(true)
+        .truncate(false)
+        .open(question_file)?;
+    let mut wtr = csv::Writer::from_writer(file);
+
+    for question in &questions.questions {
+        // Convert from a player_rank_lib question struct to one I can serialize
+        let parsed_question = ParsedQuestion {
+            player1: question.question.player1.clone(),
+            player1_pos: question.question.pos1.to_str(),
+            player2: question.question.player2.clone(),
+            player2_pos: question.question.pos2.to_str(),
+            skill_factor: question.response.clone(),
+        };
+        wtr.serialize(parsed_question)?;
+    }
+    wtr.flush()?;
     Ok(())
 }
 

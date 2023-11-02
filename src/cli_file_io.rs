@@ -131,6 +131,34 @@ pub fn write_question_file(
     Ok(())
 }
 
-pub fn write_rank_file(_file: &std::path::PathBuf, _ranks: &player_rank_lib::Ranks) -> Result<()> {
+#[derive(Serialize)]
+struct ParsedRank {
+    pub name: String,
+    pub atk: f64,
+    pub def: f64,
+    pub goalie: Option<f64>,
+}
+
+pub fn write_rank_file(
+    rank_file: &std::path::PathBuf,
+    ranks: &player_rank_lib::Ranks,
+) -> Result<()> {
+    let file = OpenOptions::new()
+        .write(true)
+        .truncate(false)
+        .open(rank_file)?;
+    let mut wtr = csv::Writer::from_writer(file);
+
+    for rank in &ranks.ranks {
+        // Convert from a player_rank_lib rank struct to one I can serialize
+        let parsed_rank = ParsedRank {
+            name: rank.name.clone(),
+            atk: rank.atk,
+            def: rank.def,
+            goalie: rank.goalie,
+        };
+        wtr.serialize(parsed_rank)?;
+    }
+    wtr.flush()?;
     Ok(())
 }

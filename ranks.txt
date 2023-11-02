@@ -1,0 +1,3 @@
+name,atk,def,goalie
+player1 Name,1.2,1.5,2.2
+player2 Name,0.8,1.24,

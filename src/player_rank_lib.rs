@@ -69,7 +69,9 @@ impl Questions {
 /// Player Rank Interface: Output, rank list
 pub struct Rank {
     pub name: String,
-    pub rank: f64,
+    pub atk: f64,
+    pub def: f64,
+    pub goalie: Option<f64>,
 }
 
 pub struct Ranks {

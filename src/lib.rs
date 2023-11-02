@@ -5,7 +5,6 @@ use std::fmt;
 use std::fs;
 use std::io;
 
-
 mod cli_file_io;
 mod player_rank_lib;
 
@@ -54,10 +53,24 @@ fn validate_arguments(args: &Cli) -> Result<()> {
 }
 
 fn run_ranking() -> Result<player_rank_lib::Ranks> {
-    Ok(player_rank_lib::Ranks::new())
+    let mut ranks = player_rank_lib::Ranks::new();
+    // Add some test ranks for now
+    ranks.ranks.push(player_rank_lib::Rank {
+        name: String::from("player1 Name"),
+        atk: 1.2,
+        def: 1.5,
+        goalie: Some(2.2),
+    });
+    ranks.ranks.push(player_rank_lib::Rank {
+        name: String::from("player2 Name"),
+        atk: 0.8,
+        def: 1.24,
+        goalie: None,
+    });
+    Ok(ranks)
 }
 
-pub fn run(args: Cli) ->Result<()>{
+pub fn run(args: Cli) -> Result<()> {
     validate_arguments(&args)?;
     println!("{:?}", args);
     // Convert files into their respective structs

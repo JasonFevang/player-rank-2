@@ -10,6 +10,7 @@ pub struct PlayerRank<'a> {
     minimum_set_reached: bool,
     // Queue of questions ready to be asked
     question_queue: Vec<Question>,
+    current_question: Option<Question>,
 }
 
 #[derive(Debug)]
@@ -48,9 +49,14 @@ impl Stage {
     }
 }
 
-pub enum NextSectionError{
+pub enum NextSectionError {
     MinSetNotReached,
-    AllQuestionsAsked
+    AllQuestionsAsked,
+}
+
+pub enum ResponseError{
+    NoActiveQuestion,
+    InvalidResponse
 }
 
 impl<'a> PlayerRank<'a> {
@@ -66,6 +72,7 @@ impl<'a> PlayerRank<'a> {
             stage: Stage::first(),
             minimum_set_reached: false,
             question_queue: Vec::new(),
+            current_question: None,
         };
 
         // Populate queue based on the stage and min questions asked
@@ -132,29 +139,49 @@ impl<'a> PlayerRank<'a> {
             self.populate_queue();
         }
 
-        let res = (self.question_queue.pop(), status);
-        res
+        // Set the current question
+        self.current_question = self.question_queue.pop();
+
+        // Return the current question to the user
+        (self.current_question.clone(), status)
     }
 
     pub fn next_section(&mut self) -> Result<(), NextSectionError> {
-        if self.minimum_set_reached{
-            if(self.stage == Stage::Done){
+        if self.minimum_set_reached {
+            if (self.stage == Stage::Done) {
                 Err(NextSectionError::AllQuestionsAsked)
-            }
-            else{
-                // Empty the question queue. The next time a question is requested, it'll move to 
+            } else {
+                // Empty the question queue. The next time a question is requested, it'll move to
                 // the next section to refill the queue
                 self.question_queue.clear();
                 Ok(())
             }
-        }
-        else{
+        } else {
             Err(NextSectionError::MinSetNotReached)
         }
     }
 
-    pub fn give_response(&self, _response: f64) -> Result<()> {
-        Ok(())
+    pub fn give_response(&mut self, response: f64) -> Result<(), ResponseError> {
+        if let Some(question) = self.current_question.clone() {
+            // Check that the response is allowed
+            if !response.is_finite() || response.is_sign_negative(){
+                Err(ResponseError::InvalidResponse)
+            }
+            else{
+                // Add to our list of answered questions
+                self.questions
+                    .questions
+                    .push(AnsweredQuestion { question, response });
+
+                // Clear the current question
+                self.current_question = None;
+
+                Ok(())
+            }
+        }
+        else{
+            Err(ResponseError::NoActiveQuestion)
+        }
     }
 
     pub fn get_ranking(&self) -> Result<Ranks> {

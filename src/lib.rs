@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use clap::Parser;
 use log::trace;
 use std::fmt;
@@ -112,7 +112,19 @@ fn run_ranking(player_rank: &mut player_rank_lib::PlayerRank) -> Result<player_r
 
                 let response = get_response()?;
                 match response {
-                    UserResponse::Value(value) => player_rank.give_response(value)?,
+                    UserResponse::Value(value) => {
+                        if let Err(err) = player_rank.give_response(value){
+                            match err{
+                                player_rank_lib::ResponseError::InvalidResponse => {
+                                    println!("Invalid response");
+                                    get_another_response = true;
+                                }
+                                player_rank_lib::ResponseError::NoActiveQuestion => {
+                                    return Err(anyhow!("Internal logic error: Gave a response with no active question"));
+                                }
+                            }
+                        }
+                    }
                     UserResponse::Skip => { /* Do nothing*/ }
                     UserResponse::NextSection => {
                         if let Err(err) = player_rank.next_section() {

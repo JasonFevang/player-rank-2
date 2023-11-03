@@ -4,6 +4,12 @@ use anyhow::Result;
 pub struct PlayerRank<'a> {
     players: &'a Players,
     questions: &'a mut Questions,
+    // Curent stage of questioning
+    stage: Stage,
+    // If we've reached a minimum set of questions to compute a ranking
+    minimum_set_reached: bool,
+    // Queue of questions ready to be asked
+    question_queue: Vec<Question>,
 }
 
 #[derive(Debug)]
@@ -13,29 +19,29 @@ pub enum QuestionStatus {
 }
 
 // Question asking is broken into stages, these are them
+#[derive(PartialEq, Eq)]
 enum Stage {
-    position(Position),
-    self_rating
+    Position(Position),
+    SelfRating,
+    Done,
 }
 
-impl Stage{
+impl Stage {
     // The first stage in the ordering
-    fn first() -> Self{
-        Stage::position(Position::Atk)
+    fn first() -> Self {
+        Stage::Position(Position::Atk)
     }
 
-    // The stages has an ordering. This method defines that ordering
-    // None implies the ordering has been reached
-    fn next(&self) -> Option<Self>{
-        match self{
-            Stage::position(pos) => {
-                match pos{
-                    Position::Atk => Some(Stage::position(Position::Def)),
-                    Position::Def => Some(Stage::position(Position::Goalie)),
-                    Position::Goalie => Some(Stage::self_rating)
-                }
+    // The stages have an ordering. This method defines that ordering
+    fn next(&self) -> Self {
+        match self {
+            Stage::Position(pos) => match pos {
+                Position::Atk => Stage::Position(Position::Def),
+                Position::Def => Stage::Position(Position::Goalie),
+                Position::Goalie => Stage::SelfRating,
             },
-            Stage::self_rating => None
+            Stage::SelfRating => Stage::Done,
+            Stage::Done => Stage::Done, // Stay in Done forever
         }
     }
 }
@@ -46,23 +52,69 @@ impl<'a> PlayerRank<'a> {
         if !questions.questions.is_empty() {
             panic!("I cannot handle non-empty question files");
         }
-        PlayerRank { players, questions }
+
+        PlayerRank {
+            players,
+            questions,
+            stage: Stage::SelfRating,
+            minimum_set_reached: false,
+            question_queue: Vec::new(),
+        }
     }
 
-    pub fn get_next_question(&self) -> (Option<Question>, Option<QuestionStatus>) {
-        // Return a dummy question, and status is nothing for now
-        (
-            Some(Question {
-                player1: String::from("player1"),
-                pos1: Position::Atk,
-                player2: String::from("player2"),
-                pos2: Position::Atk,
-            }),
-            None,
-        )
+    fn populate_queue(&mut self) {
+        let pos = match self.stage{
+            Stage::Position(p) => p,
+            Stage::SelfRating => Position::Atk,
+            Stage::Done => return // Don't populate the queue if we're done
+        };
+        // Generate questions to go on the queue
+        self.question_queue.push(Question {
+            player1: String::from("player1"),
+            pos1: pos,
+            player2: String::from("player2"),
+            pos2: pos,
+        });
+
+        self.question_queue.push(Question {
+            player1: String::from("player3"),
+            pos1: pos,
+            player2: String::from("player4"),
+            pos2: pos,
+        });
+
+        self.question_queue.push(Question {
+            player1: String::from("player5"),
+            pos1: pos,
+            player2: String::from("player6"),
+            pos2: pos,
+        });
     }
 
-    pub fn next_section(&self) -> Result<()>{
+    pub fn get_next_question(&mut self) -> (Option<Question>, Option<QuestionStatus>) {
+        if self.question_queue.is_empty() {
+            // Populate queue based on the stage and min questions asked
+            self.populate_queue();
+        }
+
+        let res = (self.question_queue.pop(), None);
+
+        if self.question_queue.is_empty() {
+            // Move to the next stage
+            self.stage = self.stage.next();
+
+            // Move from minimum questions to extra questions
+            if self.stage == Stage::Done && !self.minimum_set_reached {
+                self.minimum_set_reached = true;
+                // Reset the stage for asking extra questions
+                self.stage = Stage::first();
+            }
+        }
+
+        res
+    }
+
+    pub fn next_section(&self) -> Result<()> {
         Ok(())
     }
 

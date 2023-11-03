@@ -93,7 +93,7 @@ fn ask_question(question: &player_rank_lib::Question) -> Result<UserResponse> {
     }
 }
 
-fn run_ranking(player_rank: player_rank_lib::PlayerRank) -> Result<player_rank_lib::Ranks> {
+fn run_ranking(player_rank: &mut player_rank_lib::PlayerRank) -> Result<player_rank_lib::Ranks> {
     loop {
         // Get a question from player_rank
         let (question, status) = player_rank.get_next_question();
@@ -108,10 +108,10 @@ fn run_ranking(player_rank: player_rank_lib::PlayerRank) -> Result<player_rank_l
                 UserResponse::Value(value) => player_rank.give_response(value)?,
                 UserResponse::Skip => { /* Do nothing*/ }
                 UserResponse::NextSection => {
-                    if let Err(_) = player_rank.next_section(){
+                    if let Err(_) = player_rank.next_section() {
                         println!("All sections have been completed. Type \"q\" to quit");
                     }
-                },
+                }
                 UserResponse::Quit => break,
             };
         } else {
@@ -140,10 +140,10 @@ pub fn run(args: Cli) -> Result<()> {
     }
 
     // Create a PlayerRank object that handles figuring out what questions to ask and creating the ranking
-    let player_rank = player_rank_lib::PlayerRank::new(&players, &mut questions);
+    let mut player_rank = player_rank_lib::PlayerRank::new(&players, &mut questions);
 
     // Run the routine of asking the user questions and parsing responses
-    let ranks = run_ranking(player_rank)?;
+    let ranks = run_ranking(&mut player_rank)?;
 
     // Write the outputs back to file
     cli_file_io::write_question_file(&args.question_file, &questions)?;

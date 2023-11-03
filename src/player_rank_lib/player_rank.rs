@@ -12,6 +12,34 @@ pub enum QuestionStatus {
     ConnectionLevelReached(i32),
 }
 
+// Question asking is broken into stages, these are them
+enum Stage {
+    position(Position),
+    self_rating
+}
+
+impl Stage{
+    // The first stage in the ordering
+    fn first() -> Self{
+        Stage::position(Position::Atk)
+    }
+
+    // The stages has an ordering. This method defines that ordering
+    // None implies the ordering has been reached
+    fn next(&self) -> Option<Self>{
+        match self{
+            Stage::position(pos) => {
+                match pos{
+                    Position::Atk => Some(Stage::position(Position::Def)),
+                    Position::Def => Some(Stage::position(Position::Goalie)),
+                    Position::Goalie => Some(Stage::self_rating)
+                }
+            },
+            Stage::self_rating => None
+        }
+    }
+}
+
 impl<'a> PlayerRank<'a> {
     pub fn new(players: &'a Players, questions: &'a mut Questions) -> Self {
         // TODO: Handle non-empty question files, or at least make this nicer

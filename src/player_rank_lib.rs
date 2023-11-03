@@ -40,6 +40,26 @@ pub enum Position {
     Goalie,
 }
 
+impl Position {
+    // Try to create a position from a string
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "Atk" => Some(Position::Atk),
+            "Def" => Some(Position::Def),
+            "Goalie" => Some(Position::Goalie),
+            _ => None, // Handle unrecognized strings
+        }
+    }
+
+    pub fn to_str(&self) -> String {
+        match self {
+            Position::Atk => String::from("Atk"),
+            Position::Def => String::from("Def"),
+            Position::Goalie => String::from("Goalie"),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Question {
     pub player1: String,

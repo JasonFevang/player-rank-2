@@ -47,26 +47,6 @@ struct ParsedQuestion {
     skill_factor: f64,
 }
 
-impl player_rank_lib::Position {
-    // Try to create a position from a string
-    fn from_str(s: &str) -> Option<Self> {
-        match s {
-            "Atk" => Some(player_rank_lib::Position::Atk),
-            "Def" => Some(player_rank_lib::Position::Def),
-            "Goalie" => Some(player_rank_lib::Position::Goalie),
-            _ => None, // Handle unrecognized strings
-        }
-    }
-
-    fn to_str(&self) -> String {
-        match self {
-            player_rank_lib::Position::Atk => String::from("Atk"),
-            player_rank_lib::Position::Def => String::from("Def"),
-            player_rank_lib::Position::Goalie => String::from("Goalie"),
-        }
-    }
-}
-
 // Convert a string to a position enum, handling errors
 fn string_to_position(pos_string: &str) -> Result<player_rank_lib::Position> {
     match player_rank_lib::Position::from_str(pos_string) {

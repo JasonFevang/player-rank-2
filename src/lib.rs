@@ -57,39 +57,59 @@ enum UserResponse {
     Quit,
 }
 
-fn ask_question(_question: &player_rank_lib::Question) -> UserResponse {
-    UserResponse::Value(1.2)
+fn ask_question(question: &player_rank_lib::Question) -> Result<UserResponse> {
+    // Ask the question
+    println!(
+        "{} {} vs {} {}",
+        question.player1,
+        question.pos1.to_str(),
+        question.player2,
+        question.pos2.to_str()
+    );
+
+    // Get a response
+    loop {
+        let mut input = String::new();
+
+        // Read a line from the user
+        io::stdin()
+            .read_line(&mut input)
+            .with_context(|| format!("Failed to read user input"))?;
+        let input = input.trim();
+
+        // Check for specific commands
+        match input {
+            "s" => return Ok(UserResponse::Skip),
+            "q" => return Ok(UserResponse::Quit),
+            _ => {}
+        }
+
+        // Check for rating
+        if let Ok(val) = input.parse::<f64>() {
+            return Ok(UserResponse::Value(val));
+        };
+    }
 }
 
-
-fn run_ranking(player_rank : player_rank_lib::PlayerRank) -> Result<player_rank_lib::Ranks> {
+fn run_ranking(player_rank: player_rank_lib::PlayerRank) -> Result<player_rank_lib::Ranks> {
     loop {
         // Get a question from player_rank
         let (question, status) = player_rank.get_next_question();
         if let Some(status) = status {
-            println!("Question status: {:?}", status);
             // Report status to user, or otherwise act on it
+            println!("Question status: {:?}", status);
         }
 
         if let Some(question) = question {
-            let response = ask_question(&question);
+            let response = ask_question(&question)?;
             match response {
-                UserResponse::Value(value) => {
-                    if let Some(response) = player_rank.give_response(value) {
-                        match response {
-                            player_rank_lib::ResponseStatus::NoQuestionToRespondTo => {
-                                println!("handle no questions to respond to error")
-                            }
-                        }
-                    }
-                },
-                UserResponse::Skip => {/* Do nothing*/},
+                UserResponse::Value(value) => player_rank.give_response(value)?,
+                UserResponse::Skip => { /* Do nothing*/ }
                 UserResponse::Quit => break,
             };
-        }
-        else {
+        } else {
             // No question available, we've run out of questions
-            println!("No question available, we've asked or skipped all questions");
+            println!("All possible combinations have been asked or skipped, you're done! :)");
             break;
         }
     }

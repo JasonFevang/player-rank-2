@@ -118,10 +118,6 @@ pub enum QuestionStatus {
     ConnectionLevelReached(i32),
 }
 
-pub enum ResponseStatus {
-    NoQuestionToRespondTo,
-}
-
 impl<'a> PlayerRank<'a> {
     pub fn new(players: &'a Players, questions: &'a mut Questions) -> Self {
         PlayerRank { players, questions }
@@ -140,10 +136,9 @@ impl<'a> PlayerRank<'a> {
         )
     }
 
-    pub fn give_response(&self, _response: f64) -> Option<ResponseStatus> {
-        None
+    pub fn give_response(&self, _response: f64) -> Result<()> {
+        Ok(())
     }
-
 
     pub fn get_ranking(&self) -> Result<Ranks> {
         let mut ranks = Ranks::new();

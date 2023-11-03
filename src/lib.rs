@@ -51,23 +51,49 @@ fn validate_arguments(args: &Cli) -> Result<()> {
     file_exists(&args.output_file)?;
     Ok(())
 }
+enum UserResponse {
+    Value(f64),
+    Skip,
+    Quit,
+}
 
-fn run_ranking() -> Result<player_rank_lib::Ranks> {
-    let mut ranks = player_rank_lib::Ranks::new();
-    // Add some test ranks for now
-    ranks.ranks.push(player_rank_lib::Rank {
-        name: String::from("player1 Name"),
-        atk: 1.2,
-        def: 1.5,
-        goalie: Some(2.2),
-    });
-    ranks.ranks.push(player_rank_lib::Rank {
-        name: String::from("player2 Name"),
-        atk: 0.8,
-        def: 1.24,
-        goalie: None,
-    });
-    Ok(ranks)
+fn ask_question(_question: &player_rank_lib::Question) -> UserResponse {
+    UserResponse::Value(1.2)
+}
+
+
+fn run_ranking(player_rank : player_rank_lib::PlayerRank) -> Result<player_rank_lib::Ranks> {
+    loop {
+        // Get a question from player_rank
+        let (question, status) = player_rank.get_next_question();
+        if let Some(status) = status {
+            println!("Question status: {:?}", status);
+            // Report status to user, or otherwise act on it
+        }
+
+        if let Some(question) = question {
+            let response = ask_question(&question);
+            match response {
+                UserResponse::Value(value) => {
+                    if let Some(response) = player_rank.give_response(value) {
+                        match response {
+                            player_rank_lib::ResponseStatus::NoQuestionToRespondTo => {
+                                println!("handle no questions to respond to error")
+                            }
+                        }
+                    }
+                },
+                UserResponse::Skip => {/* Do nothing*/},
+                UserResponse::Quit => break,
+            };
+        }
+        else {
+            // No question available, we've run out of questions
+            println!("No question available, we've asked or skipped all questions");
+            break;
+        }
+    }
+    player_rank.get_ranking()
 }
 
 pub fn run(args: Cli) -> Result<()> {
@@ -75,7 +101,7 @@ pub fn run(args: Cli) -> Result<()> {
     println!("{:?}", args);
     // Convert files into their respective structs
     let players = cli_file_io::parse_player_file(&args.player_file)?;
-    let questions = cli_file_io::parse_question_file(&args.question_file)?;
+    let mut questions = cli_file_io::parse_question_file(&args.question_file)?;
 
     // Print parsed players
     for player in &players.players {
@@ -86,7 +112,9 @@ pub fn run(args: Cli) -> Result<()> {
         println!("{:?}", question);
     }
 
-    let ranks = run_ranking()?;
+    let player_rank = player_rank_lib::PlayerRank::new(&players, &mut questions);
+
+    let ranks = run_ranking(player_rank)?;
 
     // Write the outputs back to file
     cli_file_io::write_question_file(&args.question_file, &questions)?;

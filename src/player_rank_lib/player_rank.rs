@@ -14,13 +14,14 @@ pub struct PlayerRank<'a> {
 
 #[derive(Debug)]
 pub enum QuestionStatus {
+    StartingStage(Stage),
     AllMandatoryQuestionsAnswered, // TODO: This is just a connection level of 1. Are there other statuses we'd pass back?
     ConnectionLevelReached(i32),
 }
 
 // Question asking is broken into stages, these are them
-#[derive(PartialEq, Eq)]
-enum Stage {
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
+pub enum Stage {
     Position(Position),
     SelfRating,
     Done,
@@ -56,7 +57,7 @@ impl<'a> PlayerRank<'a> {
         PlayerRank {
             players,
             questions,
-            stage: Stage::SelfRating,
+            stage: Stage::first(),
             minimum_set_reached: false,
             question_queue: Vec::new(),
         }
@@ -92,12 +93,23 @@ impl<'a> PlayerRank<'a> {
     }
 
     pub fn get_next_question(&mut self) -> (Option<Question>, Option<QuestionStatus>) {
+        // Status update for the caller
+        let mut status : Option<QuestionStatus> = None;
+
+        // Check if we need to populate the queue
         if self.question_queue.is_empty() {
+            // If we're done, we're not starting a new stage, otherwise update 
+            // user on the new stage
+            status = match self.stage{
+                Stage::Done => None,
+                _ => Some(QuestionStatus::StartingStage(self.stage))
+            };
+
             // Populate queue based on the stage and min questions asked
             self.populate_queue();
         }
 
-        let res = (self.question_queue.pop(), None);
+        let res = (self.question_queue.pop(), status);
 
         if self.question_queue.is_empty() {
             // Move to the next stage

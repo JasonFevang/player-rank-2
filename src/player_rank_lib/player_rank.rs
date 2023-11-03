@@ -15,7 +15,8 @@ pub struct PlayerRank<'a> {
 #[derive(Debug)]
 pub enum QuestionStatus {
     StartingStage(Stage),
-    AllMandatoryQuestionsAnswered, // TODO: This is just a connection level of 1. Are there other statuses we'd pass back?
+    // Need to pass the stage back because this coincides with starting a new stage regretably
+    AllMandatoryQuestionsAnswered(Stage), // TODO: This is just a connection level of 1. Are there other statuses we'd pass back?
     ConnectionLevelReached(i32),
 }
 
@@ -54,20 +55,25 @@ impl<'a> PlayerRank<'a> {
             panic!("I cannot handle non-empty question files");
         }
 
-        PlayerRank {
+        let mut res = PlayerRank {
             players,
             questions,
             stage: Stage::first(),
             minimum_set_reached: false,
             question_queue: Vec::new(),
-        }
+        };
+
+        // Populate queue based on the stage and min questions asked
+        res.populate_queue();
+
+        res
     }
 
     fn populate_queue(&mut self) {
-        let pos = match self.stage{
+        let pos = match self.stage {
             Stage::Position(p) => p,
             Stage::SelfRating => Position::Atk,
-            Stage::Done => return // Don't populate the queue if we're done
+            Stage::Done => return, // Don't populate the queue if we're done
         };
         // Generate questions to go on the queue
         self.question_queue.push(Question {
@@ -94,35 +100,34 @@ impl<'a> PlayerRank<'a> {
 
     pub fn get_next_question(&mut self) -> (Option<Question>, Option<QuestionStatus>) {
         // Status update for the caller
-        let mut status : Option<QuestionStatus> = None;
+        let mut status: Option<QuestionStatus> = None;
 
         // Check if we need to populate the queue
         if self.question_queue.is_empty() {
-            // If we're done, we're not starting a new stage, otherwise update 
-            // user on the new stage
-            status = match self.stage{
-                Stage::Done => None,
-                _ => Some(QuestionStatus::StartingStage(self.stage))
-            };
-
-            // Populate queue based on the stage and min questions asked
-            self.populate_queue();
-        }
-
-        let res = (self.question_queue.pop(), status);
-
-        if self.question_queue.is_empty() {
             // Move to the next stage
             self.stage = self.stage.next();
+
+            // If we're done, we're not starting a new stage, otherwise update
+            // user on the new stage
+            status = match self.stage {
+                Stage::Done => None,
+                _ => Some(QuestionStatus::StartingStage(self.stage)),
+            };
 
             // Move from minimum questions to extra questions
             if self.stage == Stage::Done && !self.minimum_set_reached {
                 self.minimum_set_reached = true;
                 // Reset the stage for asking extra questions
                 self.stage = Stage::first();
+                // Inform user we're done min question set
+                status = Some(QuestionStatus::AllMandatoryQuestionsAnswered(self.stage));
             }
+
+            // Populate queue based on the stage and min questions asked
+            self.populate_queue();
         }
 
+        let res = (self.question_queue.pop(), status);
         res
     }
 

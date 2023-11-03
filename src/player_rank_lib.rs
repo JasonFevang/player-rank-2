@@ -120,6 +120,10 @@ pub enum QuestionStatus {
 
 impl<'a> PlayerRank<'a> {
     pub fn new(players: &'a Players, questions: &'a mut Questions) -> Self {
+        // TODO: Handle non-empty question files, or at least make this nicer
+        if !questions.questions.is_empty() {
+            panic!("I cannot handle non-empty question files");
+        }
         PlayerRank { players, questions }
     }
 

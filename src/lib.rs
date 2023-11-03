@@ -132,8 +132,10 @@ pub fn run(args: Cli) -> Result<()> {
         println!("{:?}", question);
     }
 
+    // Create a PlayerRank object that handles figuring out what questions to ask and creating the ranking
     let player_rank = player_rank_lib::PlayerRank::new(&players, &mut questions);
 
+    // Run the routine of asking the user questions and parsing responses
     let ranks = run_ranking(player_rank)?;
 
     // Write the outputs back to file

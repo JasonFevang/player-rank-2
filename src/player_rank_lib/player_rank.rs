@@ -48,6 +48,11 @@ impl Stage {
     }
 }
 
+pub enum NextSectionError{
+    MinSetNotReached,
+    AllQuestionsAsked
+}
+
 impl<'a> PlayerRank<'a> {
     pub fn new(players: &'a Players, questions: &'a mut Questions) -> Self {
         // TODO: Handle non-empty question files, or at least make this nicer
@@ -131,8 +136,21 @@ impl<'a> PlayerRank<'a> {
         res
     }
 
-    pub fn next_section(&self) -> Result<()> {
-        Ok(())
+    pub fn next_section(&mut self) -> Result<(), NextSectionError> {
+        if self.minimum_set_reached{
+            if(self.stage == Stage::Done){
+                Err(NextSectionError::AllQuestionsAsked)
+            }
+            else{
+                // Empty the question queue. The next time a question is requested, it'll move to 
+                // the next section to refill the queue
+                self.question_queue.clear();
+                Ok(())
+            }
+        }
+        else{
+            Err(NextSectionError::MinSetNotReached)
+        }
     }
 
     pub fn give_response(&self, _response: f64) -> Result<()> {

@@ -58,8 +58,7 @@ enum UserResponse {
     Quit,
 }
 
-fn ask_question(question: &player_rank_lib::Question) -> Result<UserResponse> {
-    // Ask the question
+fn ask_question(question: &player_rank_lib::Question) {
     println!(
         "{} {} vs {} {}",
         question.player1,
@@ -67,8 +66,9 @@ fn ask_question(question: &player_rank_lib::Question) -> Result<UserResponse> {
         question.player2,
         question.pos2.to_str()
     );
+}
 
-    // Get a response
+fn get_response() -> Result<UserResponse> {
     loop {
         let mut input = String::new();
 
@@ -94,7 +94,7 @@ fn ask_question(question: &player_rank_lib::Question) -> Result<UserResponse> {
 }
 
 fn run_ranking(player_rank: &mut player_rank_lib::PlayerRank) -> Result<player_rank_lib::Ranks> {
-    loop {
+    'ranking_loop: loop {
         // Get a question from player_rank
         let (question, status) = player_rank.get_next_question();
         if let Some(status) = status {
@@ -103,17 +103,30 @@ fn run_ranking(player_rank: &mut player_rank_lib::PlayerRank) -> Result<player_r
         }
 
         if let Some(question) = question {
-            let response = ask_question(&question)?;
-            match response {
-                UserResponse::Value(value) => player_rank.give_response(value)?,
-                UserResponse::Skip => { /* Do nothing*/ }
-                UserResponse::NextSection => {
-                    if let Err(_) = player_rank.next_section() {
-                        println!("All sections have been completed. Type \"q\" to quit");
+            ask_question(&question);
+
+            // Get a valid response
+            let mut get_another_response = true;
+            while get_another_response{
+                get_another_response = false; // Assume we won't need to get another response
+
+                let response = get_response()?;
+                match response {
+                    UserResponse::Value(value) => player_rank.give_response(value)?,
+                    UserResponse::Skip => { /* Do nothing*/ }
+                    UserResponse::NextSection => {
+                        if let Err(err) = player_rank.next_section() {
+                            // If we can't skip sections, get another response
+                            get_another_response = true;
+                            match  err {
+                                player_rank_lib::NextSectionError::MinSetNotReached => println!("Can't skip sections until the minimum question set has been reached"),
+                                player_rank_lib::NextSectionError::AllQuestionsAsked => println!("All questions have been asked! You gotta quit now"),
+                            }
+                        }
                     }
-                }
-                UserResponse::Quit => break,
-            };
+                    UserResponse::Quit => break 'ranking_loop,
+                };
+            }
         } else {
             // No question available, we've run out of questions
             println!("All possible combinations have been asked or skipped, you're done! :)");

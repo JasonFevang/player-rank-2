@@ -54,6 +54,7 @@ fn validate_arguments(args: &Cli) -> Result<()> {
 enum UserResponse {
     Value(f64),
     Skip,
+    NextSection,
     Quit,
 }
 
@@ -80,6 +81,7 @@ fn ask_question(question: &player_rank_lib::Question) -> Result<UserResponse> {
         // Check for specific commands
         match input {
             "s" => return Ok(UserResponse::Skip),
+            "n" => return Ok(UserResponse::NextSection),
             "q" => return Ok(UserResponse::Quit),
             _ => {}
         }
@@ -105,6 +107,11 @@ fn run_ranking(player_rank: player_rank_lib::PlayerRank) -> Result<player_rank_l
             match response {
                 UserResponse::Value(value) => player_rank.give_response(value)?,
                 UserResponse::Skip => { /* Do nothing*/ }
+                UserResponse::NextSection => {
+                    if let Err(_) = player_rank.next_section(){
+                        println!("All sections have been completed. Type \"q\" to quit");
+                    }
+                },
                 UserResponse::Quit => break,
             };
         } else {

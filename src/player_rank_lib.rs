@@ -140,6 +140,10 @@ impl<'a> PlayerRank<'a> {
         )
     }
 
+    pub fn next_section(&self) -> Result<()>{
+        Ok(())
+    }
+
     pub fn give_response(&self, _response: f64) -> Result<()> {
         Ok(())
     }

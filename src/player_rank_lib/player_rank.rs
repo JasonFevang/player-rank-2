@@ -1,5 +1,8 @@
 use crate::player_rank_lib::*;
 use anyhow::Result;
+use rand::seq::SliceRandom;
+use rand::thread_rng;
+use rand::Rng;
 
 pub struct PlayerRank<'a> {
     players: &'a Players,
@@ -54,9 +57,9 @@ pub enum NextSectionError {
     AllQuestionsAsked,
 }
 
-pub enum ResponseError{
+pub enum ResponseError {
     NoActiveQuestion,
-    InvalidResponse
+    InvalidResponse,
 }
 
 impl<'a> PlayerRank<'a> {
@@ -81,33 +84,110 @@ impl<'a> PlayerRank<'a> {
         res
     }
 
+    fn get_shuffled_player_list(&self) -> Vec<&Player> {
+        // Create shuffled list of all players
+        let mut player_list: Vec<&Player> = Vec::new();
+        for player in &self.players.players {
+            player_list.push(&player);
+        }
+        let mut rng = thread_rng();
+        player_list.shuffle(&mut rng);
+        player_list
+    }
+
+    // Generate a randomized, minimum set of questions to fully define the vector space(idk if that means anything but it sounds sick lmao)
+    fn min_set_populate(&mut self, pos: Position) {
+        let player_list = self.get_shuffled_player_list();
+
+        // Create pairs from this shuffled list
+        let mut pairs: Vec<(&Player, &Player)> = Vec::new();
+        for i in 0..(player_list.len() - 1) {
+            pairs.push((player_list[i], player_list[i + 1]));
+        }
+
+        // Shuffle those pairs
+        let mut rng = thread_rng();
+        pairs.shuffle(&mut rng);
+
+        let mut temp_questions = Vec::new(); // Temporary vector to collect questions
+
+        // Convert the player pairs into references
+        for pair in pairs {
+            let question = Question {
+                player1: pair.0.name.clone(),
+                pos1: pos,
+                player2: pair.1.name.clone(),
+                pos2: pos,
+            };
+            temp_questions.push(question);
+        }
+
+        self.question_queue.extend(temp_questions);
+    }
+
+    fn min_set_populate_self(&mut self) {
+        let player_list = self.get_shuffled_player_list();
+
+        assert!(player_list.len() > 3);
+
+        let mut temp_questions = Vec::new(); // Temporary vector to collect questions
+
+        // Attack-Defense
+        temp_questions.push(Question {
+            player1: player_list[0].name.clone(),
+            pos1: Position::Atk,
+            player2: player_list[0].name.clone(),
+            pos2: Position::Def,
+        });
+
+        // Attack-Goalie
+        temp_questions.push(Question {
+            player1: player_list[0].name.clone(),
+            pos1: Position::Atk,
+            player2: player_list[0].name.clone(),
+            pos2: Position::Goalie,
+        });
+
+        self.question_queue.extend(temp_questions);
+    }
+
     fn populate_queue(&mut self) {
-        let pos = match self.stage {
-            Stage::Position(p) => p,
-            Stage::SelfRating => Position::Atk,
-            Stage::Done => return, // Don't populate the queue if we're done
-        };
-        // Generate questions to go on the queue
-        self.question_queue.push(Question {
-            player1: String::from("player1"),
-            pos1: pos,
-            player2: String::from("player2"),
-            pos2: pos,
-        });
+        if !self.minimum_set_reached {
+            // Populate with minimum set for the stage
+            match self.stage {
+                Stage::Position(pos) => self.min_set_populate(pos),
+                Stage::SelfRating => self.min_set_populate_self(),
+                Stage::Done => { /* Nothing to populate */ }
+            }
+        } else {
+            // TODO: Determine all cominbations and shuffle 'em up
+            let pos = match self.stage {
+                Stage::Position(p) => p,
+                Stage::SelfRating => Position::Atk,
+                Stage::Done => return, // Don't populate the queue if we're done
+            };
+            // Generate questions to go on the queue
+            self.question_queue.push(Question {
+                player1: String::from("player1"),
+                pos1: pos,
+                player2: String::from("player2"),
+                pos2: pos,
+            });
 
-        self.question_queue.push(Question {
-            player1: String::from("player3"),
-            pos1: pos,
-            player2: String::from("player4"),
-            pos2: pos,
-        });
+            self.question_queue.push(Question {
+                player1: String::from("player3"),
+                pos1: pos,
+                player2: String::from("player4"),
+                pos2: pos,
+            });
 
-        self.question_queue.push(Question {
-            player1: String::from("player5"),
-            pos1: pos,
-            player2: String::from("player6"),
-            pos2: pos,
-        });
+            self.question_queue.push(Question {
+                player1: String::from("player5"),
+                pos1: pos,
+                player2: String::from("player6"),
+                pos2: pos,
+            });
+        }
     }
 
     pub fn get_next_question(&mut self) -> (Option<Question>, Option<QuestionStatus>) {
@@ -148,7 +228,7 @@ impl<'a> PlayerRank<'a> {
 
     pub fn next_section(&mut self) -> Result<(), NextSectionError> {
         if self.minimum_set_reached {
-            if (self.stage == Stage::Done) {
+            if self.stage == Stage::Done {
                 Err(NextSectionError::AllQuestionsAsked)
             } else {
                 // Empty the question queue. The next time a question is requested, it'll move to
@@ -164,10 +244,9 @@ impl<'a> PlayerRank<'a> {
     pub fn give_response(&mut self, response: f64) -> Result<(), ResponseError> {
         if let Some(question) = self.current_question.clone() {
             // Check that the response is allowed
-            if !response.is_finite() || response.is_sign_negative(){
+            if !response.is_finite() || response.is_sign_negative() {
                 Err(ResponseError::InvalidResponse)
-            }
-            else{
+            } else {
                 // Add to our list of answered questions
                 self.questions
                     .questions
@@ -178,8 +257,7 @@ impl<'a> PlayerRank<'a> {
 
                 Ok(())
             }
-        }
-        else{
+        } else {
             Err(ResponseError::NoActiveQuestion)
         }
     }

@@ -12,9 +12,42 @@ pub struct PlayerRank<'a> {
     // If we've reached a minimum set of questions to compute a ranking
     minimum_set_reached: bool,
     // Queue of questions ready to be asked
-    question_queue: Vec<Question>,
-    current_question: Option<Question>,
-    skipped_questions: Vec<Question>,
+    question_queue: Vec<RefQuestion<'a>>,
+    current_question: Option<RefQuestion<'a>>,
+    skipped_questions: Vec<RefQuestion<'a>>,
+}
+
+#[derive(Copy, Clone)]
+struct RefQuestion<'a> {
+    pub player1: &'a Player,
+    pub pos1: Position,
+    pub player2: &'a Player,
+    pub pos2: Position,
+}
+
+// Add method to create a Question from a RefQuestion
+impl Question {
+    fn from_opt_refq(q: &Option<RefQuestion>) -> Option<Self> {
+        if let Some(q) = q {
+            Some(Question {
+                player1: q.player1.name.clone(),
+                pos1: q.pos1,
+                player2: q.player2.name.clone(),
+                pos2: q.pos2,
+            })
+        } else {
+            None
+        }
+    }
+
+    fn from_refq(q: &RefQuestion) -> Self {
+        Question {
+            player1: q.player1.name.clone(),
+            pos1: q.pos1,
+            player2: q.player2.name.clone(),
+            pos2: q.pos2,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -87,7 +120,7 @@ impl<'a> PlayerRank<'a> {
         res
     }
 
-    fn get_shuffled_player_list(&self) -> Vec<&Player> {
+    fn get_shuffled_player_list(&self) -> Vec<&'a Player> {
         // Create shuffled list of all players
         let mut player_list: Vec<&Player> = Vec::new();
         for player in &self.players.players {
@@ -116,10 +149,10 @@ impl<'a> PlayerRank<'a> {
 
         // Convert the player pairs into references
         for pair in pairs {
-            let question = Question {
-                player1: pair.0.name.clone(),
+            let question = RefQuestion {
+                player1: pair.0,
                 pos1: pos,
-                player2: pair.1.name.clone(),
+                player2: pair.1,
                 pos2: pos,
             };
             temp_questions.push(question);
@@ -136,18 +169,18 @@ impl<'a> PlayerRank<'a> {
         let mut temp_questions = Vec::new(); // Temporary vector to collect questions
 
         // Attack-Defense
-        temp_questions.push(Question {
-            player1: player_list[0].name.clone(),
+        temp_questions.push(RefQuestion {
+            player1: player_list[0],
             pos1: Position::Atk,
-            player2: player_list[0].name.clone(),
+            player2: player_list[0],
             pos2: Position::Def,
         });
 
         // Attack-Goalie
-        temp_questions.push(Question {
-            player1: player_list[0].name.clone(),
+        temp_questions.push(RefQuestion {
+            player1: player_list[0],
             pos1: Position::Atk,
-            player2: player_list[0].name.clone(),
+            player2: player_list[0],
             pos2: Position::Goalie,
         });
 
@@ -170,31 +203,31 @@ impl<'a> PlayerRank<'a> {
                 Stage::Done => return, // Don't populate the queue if we're done
             };
             // Generate questions to go on the queue
-            self.question_queue.push(Question {
-                player1: String::from("player1"),
+            self.question_queue.push(RefQuestion {
+                player1: &self.players.players[0],
                 pos1: pos,
-                player2: String::from("player2"),
+                player2: &self.players.players[1],
                 pos2: pos,
             });
 
-            self.question_queue.push(Question {
-                player1: String::from("player3"),
+            self.question_queue.push(RefQuestion {
+                player1: &self.players.players[1],
                 pos1: pos,
-                player2: String::from("player4"),
+                player2: &self.players.players[2],
                 pos2: pos,
             });
 
-            self.question_queue.push(Question {
-                player1: String::from("player5"),
+            self.question_queue.push(RefQuestion {
+                player1: &self.players.players[2],
                 pos1: pos,
-                player2: String::from("player6"),
+                player2: &self.players.players[0],
                 pos2: pos,
             });
         }
     }
 
     // When a pair gets skipped, find a pair to replace it while maintaining the requirements of a fully connected graph
-    fn get_skip_replacement(&self) -> Option<Question> {
+    fn get_skip_replacement(&self) -> Option<RefQuestion<'a>> {
         None
     }
 
@@ -203,19 +236,18 @@ impl<'a> PlayerRank<'a> {
         let mut status: Option<QuestionStatus> = None;
 
         // If there's still a current question, then it's being skipped, perform skipping logic
-        if let Some(current_question) = &self.current_question {
+        if let Some(current_question) = self.current_question {
             // Add the current question to the skipped questions list
-            self.skipped_questions.push(current_question.clone());
+            self.skipped_questions.push(current_question);
 
             // Only perform skip replacement if we're determining the minimum set
-            if !self.minimum_set_reached{
+            if !self.minimum_set_reached {
                 // Figure out the replacement
                 let replacement = self.get_skip_replacement();
 
                 if let Some(replacement) = replacement {
                     self.question_queue.push(replacement);
-                }
-                else{
+                } else {
                     // Report error status to user, no questions left
                     return (None, Some(QuestionStatus::AllQuestionsSkipped));
                 }
@@ -253,7 +285,7 @@ impl<'a> PlayerRank<'a> {
         self.current_question = self.question_queue.pop();
 
         // Return the current question to the user
-        (self.current_question.clone(), status)
+        (Question::from_opt_refq(&self.current_question), status)
     }
 
     pub fn next_section(&mut self) -> Result<(), NextSectionError> {
@@ -272,15 +304,16 @@ impl<'a> PlayerRank<'a> {
     }
 
     pub fn give_response(&mut self, response: f64) -> Result<(), ResponseError> {
-        if let Some(question) = self.current_question.clone() {
+        if let Some(question) = &self.current_question {
             // Check that the response is allowed
             if !response.is_finite() || response.is_sign_negative() {
                 Err(ResponseError::InvalidResponse)
             } else {
                 // Add to our list of answered questions
-                self.questions
-                    .questions
-                    .push(AnsweredQuestion { question, response });
+                self.questions.questions.push(AnsweredQuestion {
+                    question: Question::from_refq(question),
+                    response,
+                });
 
                 // Clear the current question
                 self.current_question = None;

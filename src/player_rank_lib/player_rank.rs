@@ -2,7 +2,8 @@ use crate::player_rank_lib::*;
 use anyhow::Result;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
-use rand::Rng;
+use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 
 pub struct PlayerRank<'a> {
     players: &'a Players,
@@ -14,10 +15,11 @@ pub struct PlayerRank<'a> {
     // Queue of questions ready to be asked
     question_queue: Vec<RefQuestion<'a>>,
     current_question: Option<RefQuestion<'a>>,
-    skipped_questions: Vec<RefQuestion<'a>>,
+    skipped_questions: HashMap<Stage, Vec<RefQuestion<'a>>>,
+    answered_questions: HashMap<Stage, Vec<RefQuestion<'a>>>,
 }
 
-#[derive(Copy, Clone)]
+#[derive(PartialEq, Copy, Clone)]
 struct RefQuestion<'a> {
     pub player1: &'a Player,
     pub pos1: Position,
@@ -60,7 +62,7 @@ pub enum QuestionStatus {
 }
 
 // Question asking is broken into stages, these are them
-#[derive(PartialEq, Eq, Debug, Clone, Copy)]
+#[derive(PartialEq, Eq, Hash, Debug, Clone, Copy)]
 pub enum Stage {
     Position(Position),
     SelfRating,
@@ -111,7 +113,8 @@ impl<'a> PlayerRank<'a> {
             minimum_set_reached: false,
             question_queue: Vec::new(),
             current_question: None,
-            skipped_questions: Vec::new(),
+            skipped_questions: HashMap::new(),
+            answered_questions: HashMap::new(),
         };
 
         // Populate queue based on the stage and min questions asked
@@ -226,9 +229,89 @@ impl<'a> PlayerRank<'a> {
         }
     }
 
-    // When a pair gets skipped, find a pair to replace it while maintaining the requirements of a fully connected graph
+    // When a question gets skipped, find a question to replace it while maintaining the requirements of a fully connected graph
     fn get_skip_replacement(&self) -> Option<RefQuestion<'a>> {
-        None
+        // TODO: Remove this, split out handling skipping other stages
+        let pos = match self.stage {
+            Stage::Position(pos) => pos,
+            _ => return None,
+        };
+
+        let curr_q = if let Some(curr_q) = self.current_question {
+            curr_q
+        } else {
+            return None;
+        };
+
+        // Find all numbers connected to each number in the skipped question
+        let mut lhs: Vec<&Player> = vec![curr_q.player1];
+        let mut rhs: Vec<&Player> = vec![curr_q.player2];
+
+        // Create a list of all the asked and about-to-be-asked questions, not including the skipped question
+        let mut all_questions = self.question_queue.clone(); // Only ever contain questions for a single stage
+        if self.answered_questions.contains_key(&self.stage) {
+            all_questions.extend(self.answered_questions[&self.stage].clone());
+        }
+
+        // Iterate through all the questions
+        // If one of them connects to a known number, add it to the list and start looking for another
+        while !all_questions.is_empty() {
+            for i in (0..all_questions.len()).rev() {
+                let pair = all_questions[i];
+                let mut found = false;
+                if lhs.contains(&pair.player1) {
+                    lhs.push(pair.player2);
+                    found = true;
+                } else if lhs.contains(&pair.player2) {
+                    lhs.push(pair.player1);
+                    found = true;
+                } else if rhs.contains(&pair.player1) {
+                    rhs.push(pair.player2);
+                    found = true;
+                } else if rhs.contains(&pair.player2) {
+                    rhs.push(pair.player1);
+                    found = true;
+                }
+                if found {
+                    all_questions.remove(i);
+                    break;
+                }
+            }
+        }
+
+        // Generate list of all potential replacement questions, not including the skipped ones
+        let mut potential_replacements: Vec<RefQuestion> = Vec::new();
+        for left in &lhs {
+            for right in &rhs {
+                let potential_question = RefQuestion {
+                    player1: *left,
+                    pos1: pos,
+                    player2: *right,
+                    pos2: pos,
+                };
+                let potential_question_rev = RefQuestion {
+                    player1: *right,
+                    pos1: pos,
+                    player2: *left,
+                    pos2: pos,
+                };
+                if self.skipped_questions.contains_key(&self.stage)
+                    && !self.skipped_questions[&self.stage].contains(&potential_question)
+                    && !self.skipped_questions[&self.stage].contains(&potential_question_rev)
+                {
+                    potential_replacements.push(potential_question);
+                }
+            }
+        }
+
+        // If all the options are skipped, return an error
+        if potential_replacements.is_empty() {
+            return None;
+        }
+
+        // Choose a random one and add it to the upcoming list
+        let rand = rand::random::<usize>() % potential_replacements.len();
+        Some(potential_replacements[rand])
     }
 
     pub fn get_next_question(&mut self) -> (Option<Question>, Option<QuestionStatus>) {
@@ -238,7 +321,14 @@ impl<'a> PlayerRank<'a> {
         // If there's still a current question, then it's being skipped, perform skipping logic
         if let Some(current_question) = self.current_question {
             // Add the current question to the skipped questions list
-            self.skipped_questions.push(current_question);
+            match self.skipped_questions.entry(self.stage) {
+                Entry::Occupied(mut entry) => {
+                    entry.get_mut().push(current_question);
+                }
+                Entry::Vacant(entry) => {
+                    entry.insert(vec![current_question]);
+                }
+            }
 
             // Only perform skip replacement if we're determining the minimum set
             if !self.minimum_set_reached {
@@ -310,6 +400,17 @@ impl<'a> PlayerRank<'a> {
                 Err(ResponseError::InvalidResponse)
             } else {
                 // Add to our list of answered questions
+                // Add the current question to the skipped questions list
+                match self.answered_questions.entry(self.stage) {
+                    Entry::Occupied(mut entry) => {
+                        entry.get_mut().push(question.clone());
+                    }
+                    Entry::Vacant(entry) => {
+                        entry.insert(vec![question.clone()]);
+                    }
+                }
+
+                // Also add to the user-facing list of answered questions
                 self.questions.questions.push(AnsweredQuestion {
                     question: Question::from_refq(question),
                     response,

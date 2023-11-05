@@ -4,7 +4,6 @@ use rand::seq::SliceRandom;
 use rand::thread_rng;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
-use std::thread::current;
 
 pub struct PlayerRank<'a> {
     players: &'a Players,
@@ -18,6 +17,7 @@ pub struct PlayerRank<'a> {
     current_question: Option<RefQuestion<'a>>,
     skipped_questions: HashMap<Stage, Vec<RefQuestion<'a>>>,
     answered_questions: HashMap<Stage, Vec<RefQuestion<'a>>>,
+    minimum_linkage: HashMap<Stage, usize>,
 }
 
 #[derive(PartialEq, Copy, Clone)]
@@ -59,7 +59,7 @@ pub enum QuestionStatus {
     // Need to pass the stage back because this coincides with starting a new stage regretably
     AllMandatoryQuestionsAnswered(Stage), // TODO: This is just a connection level of 1. Are there other statuses we'd pass back?
     AllQuestionsSkipped,
-    ConnectionLevelReached(i32),
+    ConnectionLevelReached(usize),
 }
 
 // Question asking is broken into stages, these are them
@@ -116,6 +116,7 @@ impl<'a> PlayerRank<'a> {
             current_question: None,
             skipped_questions: HashMap::new(),
             answered_questions: HashMap::new(),
+            minimum_linkage: HashMap::new(),
         };
 
         // Populate queue based on the stage and min questions asked
@@ -338,8 +339,171 @@ impl<'a> PlayerRank<'a> {
         }
     }
 
-    fn get_regular_question(&self) -> (Option<RefQuestion<'a>>, Option<QuestionStatus>) {
-        (None, None)
+    // For a given question, determine how many other answered questions reference each player in the question
+    fn count_connections(&self, question: &RefQuestion) -> usize {
+        let mut left_cnt = 0;
+        let mut right_cnt = 0;
+
+        if !self.answered_questions.contains_key(&self.stage) {
+            return 0;
+        }
+
+        for answered in &self.answered_questions[&self.stage] {
+            if answered.player1 == question.player1 || answered.player2 == question.player1 {
+                left_cnt += 1;
+            }
+            if answered.player1 == question.player2 || answered.player2 == question.player2 {
+                right_cnt += 1;
+            }
+        }
+        left_cnt + right_cnt
+    }
+
+    fn list_remaining_questions_position(&self) -> Vec<RefQuestion<'a>> {
+        let pos = match self.stage {
+            Stage::Position(pos) => pos,
+            _ => return Vec::new(),
+        };
+
+        let mut remaining_questions: Vec<RefQuestion> = Vec::new();
+        for p1 in 0..self.players.players.len() {
+            for p2 in (p1 + 1)..self.players.players.len() {
+                let question = RefQuestion {
+                    player1: &self.players.players[p1],
+                    pos1: pos,
+                    player2: &self.players.players[p2],
+                    pos2: pos,
+                };
+                let question_rev = RefQuestion {
+                    player1: &self.players.players[p2],
+                    pos1: pos,
+                    player2: &self.players.players[p1],
+                    pos2: pos,
+                };
+
+                // If we've already answered this question, ignore it
+                if self.answered_questions.contains_key(&self.stage)
+                    && (self.answered_questions[&self.stage].contains(&question)
+                        || self.answered_questions[&self.stage].contains(&question_rev))
+                {
+                    continue;
+                }
+
+                // If we've already skipped this question, ignore it
+                if self.skipped_questions.contains_key(&self.stage)
+                    && (!self.skipped_questions[&self.stage].contains(&question)
+                        || self.skipped_questions[&self.stage].contains(&question_rev))
+                {
+                    continue;
+                }
+
+                remaining_questions.push(question);
+            }
+        }
+
+        // Shuffle up the remaing questions
+        remaining_questions.shuffle(&mut thread_rng());
+        remaining_questions
+    }
+
+    fn list_remaining_questions_self_rating(&self) -> Vec<RefQuestion<'a>> {
+        let player_list = self.get_shuffled_player_list();
+
+        // Go through all the possible questions, and filter out the ones we've answered or skipped already
+        let mut remaining_questions = Vec::new();
+        for player in player_list {
+            let potential_questions: Vec<RefQuestion> = vec![
+                RefQuestion {
+                    player1: player,
+                    pos1: Position::Atk,
+                    player2: player,
+                    pos2: Position::Def,
+                },
+                RefQuestion {
+                    player1: player,
+                    pos1: Position::Atk,
+                    player2: player,
+                    pos2: Position::Goalie,
+                },
+                RefQuestion {
+                    player1: player,
+                    pos1: Position::Def,
+                    player2: player,
+                    pos2: Position::Goalie,
+                },
+            ];
+
+            for pot_q in potential_questions {
+                let pot_q_rev = RefQuestion {
+                    player1: pot_q.player1,
+                    pos1: pot_q.pos2,
+                    player2: pot_q.player2,
+                    pos2: pot_q.pos1,
+                };
+                // If we've already answered this question, ignore it
+                if self.answered_questions.contains_key(&self.stage)
+                    && (self.answered_questions[&self.stage].contains(&pot_q)
+                        || self.answered_questions[&self.stage].contains(&pot_q_rev))
+                {
+                    continue;
+                }
+
+                // If we've already skipped this question, ignore it
+                if self.skipped_questions.contains_key(&self.stage)
+                    && (!self.skipped_questions[&self.stage].contains(&pot_q)
+                        || self.skipped_questions[&self.stage].contains(&pot_q_rev))
+                {
+                    continue;
+                }
+                remaining_questions.push(pot_q);
+            }
+        }
+
+        // Shuffle up all the questions
+        remaining_questions.shuffle(&mut thread_rng());
+
+        remaining_questions
+    }
+
+    fn get_regular_question(&mut self) -> (Option<RefQuestion<'a>>, Option<QuestionStatus>) {
+        // List all remaining questions
+        let remaining_questions = match self.stage {
+            Stage::Position(_) => self.list_remaining_questions_position(),
+            Stage::SelfRating => self.list_remaining_questions_self_rating(),
+            Stage::Done => Vec::new(),
+        };
+
+        // Find minimum linked question in the list
+        let mut min_links = self.players.players.len();
+        let mut min_question: Option<RefQuestion> = None;
+        for question in remaining_questions {
+            let pair_links = self.count_connections(&question) / 2;
+            if pair_links < min_links {
+                min_links = pair_links;
+                min_question = Some(question);
+            }
+        }
+
+        // Update user on how connected the graph is
+        // This is sorta like a confidence measure
+        let status = {
+            if !self.minimum_linkage.contains_key(&self.stage) {
+                self.minimum_linkage.insert(self.stage, 0);
+            }
+
+            let min_linkage = self.minimum_linkage[&self.stage];
+
+            if min_linkage != min_links {
+                // Update the minimum linkage
+                self.minimum_linkage.insert(self.stage, min_links);
+                // Notify the user we've reached a new connection level
+                Some(QuestionStatus::ConnectionLevelReached(min_linkage))
+            } else {
+                None
+            }
+        };
+
+        (min_question, status)
     }
 
     fn get_min_set_question(&mut self) -> (Option<RefQuestion<'a>>, Option<QuestionStatus>) {

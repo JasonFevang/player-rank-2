@@ -4,6 +4,7 @@ use rand::seq::SliceRandom;
 use rand::thread_rng;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::thread::current;
 
 pub struct PlayerRank<'a> {
     players: &'a Players,
@@ -13,7 +14,7 @@ pub struct PlayerRank<'a> {
     // If we've reached a minimum set of questions to compute a ranking
     minimum_set_reached: bool,
     // Queue of questions ready to be asked
-    question_queue: Vec<RefQuestion<'a>>,
+    min_set_question_queue: Vec<RefQuestion<'a>>,
     current_question: Option<RefQuestion<'a>>,
     skipped_questions: HashMap<Stage, Vec<RefQuestion<'a>>>,
     answered_questions: HashMap<Stage, Vec<RefQuestion<'a>>>,
@@ -111,14 +112,14 @@ impl<'a> PlayerRank<'a> {
             questions,
             stage: Stage::first(),
             minimum_set_reached: false,
-            question_queue: Vec::new(),
+            min_set_question_queue: Vec::new(),
             current_question: None,
             skipped_questions: HashMap::new(),
             answered_questions: HashMap::new(),
         };
 
         // Populate queue based on the stage and min questions asked
-        res.populate_queue();
+        res.populate_min_set_queue();
 
         res
     }
@@ -135,7 +136,7 @@ impl<'a> PlayerRank<'a> {
     }
 
     // Generate a randomized, minimum set of questions to fully define the vector space(idk if that means anything but it sounds sick lmao)
-    fn min_set_populate(&mut self, pos: Position) {
+    fn min_set_populate_position(&mut self, pos: Position) {
         let player_list = self.get_shuffled_player_list();
 
         // Create pairs from this shuffled list
@@ -161,7 +162,7 @@ impl<'a> PlayerRank<'a> {
             temp_questions.push(question);
         }
 
-        self.question_queue.extend(temp_questions);
+        self.min_set_question_queue.extend(temp_questions);
     }
 
     fn min_set_populate_self(&mut self) {
@@ -187,45 +188,15 @@ impl<'a> PlayerRank<'a> {
             pos2: Position::Goalie,
         });
 
-        self.question_queue.extend(temp_questions);
+        self.min_set_question_queue.extend(temp_questions);
     }
 
-    fn populate_queue(&mut self) {
-        if !self.minimum_set_reached {
-            // Populate with minimum set for the stage
-            match self.stage {
-                Stage::Position(pos) => self.min_set_populate(pos),
-                Stage::SelfRating => self.min_set_populate_self(),
-                Stage::Done => { /* Nothing to populate */ }
-            }
-        } else {
-            // TODO: Determine all cominbations and shuffle 'em up
-            let pos = match self.stage {
-                Stage::Position(p) => p,
-                Stage::SelfRating => Position::Atk,
-                Stage::Done => return, // Don't populate the queue if we're done
-            };
-            // Generate questions to go on the queue
-            self.question_queue.push(RefQuestion {
-                player1: &self.players.players[0],
-                pos1: pos,
-                player2: &self.players.players[1],
-                pos2: pos,
-            });
-
-            self.question_queue.push(RefQuestion {
-                player1: &self.players.players[1],
-                pos1: pos,
-                player2: &self.players.players[2],
-                pos2: pos,
-            });
-
-            self.question_queue.push(RefQuestion {
-                player1: &self.players.players[2],
-                pos1: pos,
-                player2: &self.players.players[0],
-                pos2: pos,
-            });
+    fn populate_min_set_queue(&mut self) {
+        // Populate with minimum set for the stage
+        match self.stage {
+            Stage::Position(pos) => self.min_set_populate_position(pos),
+            Stage::SelfRating => self.min_set_populate_self(),
+            Stage::Done => { /* Nothing to populate */ }
         }
     }
 
@@ -246,7 +217,7 @@ impl<'a> PlayerRank<'a> {
         let mut rhs: Vec<&Player> = vec![curr_q.player2];
 
         // Create a list of all the asked and about-to-be-asked questions, not including the skipped question
-        let mut all_questions = self.question_queue.clone(); // Only ever contain questions for a single stage
+        let mut all_questions = self.min_set_question_queue.clone(); // Only ever contain questions for a single stage
         if self.answered_questions.contains_key(&self.stage) {
             all_questions.extend(self.answered_questions[&self.stage].clone());
         }
@@ -341,13 +312,15 @@ impl<'a> PlayerRank<'a> {
 
             // If we've already answered this question
             if self.answered_questions.contains_key(&Stage::SelfRating)
-                && self.answered_questions[&Stage::SelfRating].contains(&potential_question) {
+                && self.answered_questions[&Stage::SelfRating].contains(&potential_question)
+            {
                 continue;
             }
 
             // If we've already skipped this question
             if self.skipped_questions.contains_key(&Stage::SelfRating)
-                && self.skipped_questions[&Stage::SelfRating].contains(&potential_question) {
+                && self.skipped_questions[&Stage::SelfRating].contains(&potential_question)
+            {
                 // Keep looking for another question
                 continue;
             }
@@ -365,10 +338,48 @@ impl<'a> PlayerRank<'a> {
         }
     }
 
-    pub fn get_next_question(&mut self) -> (Option<Question>, Option<QuestionStatus>) {
-        // Status update for the caller
-        let mut status: Option<QuestionStatus> = None;
+    fn get_regular_question(&self) -> (Option<RefQuestion<'a>>, Option<QuestionStatus>) {
+        (None, None)
+    }
 
+    fn get_min_set_question(&mut self) -> (Option<RefQuestion<'a>>, Option<QuestionStatus>) {
+        let mut status = None;
+
+        if self.min_set_question_queue.is_empty() {
+            // Move to the next stage
+            self.stage = self.stage.next();
+
+            // If we're done, we're not starting a new stage, otherwise update
+            // user on the new stage
+            status = match self.stage {
+                Stage::Done => None,
+                _ => Some(QuestionStatus::StartingStage(self.stage)),
+            };
+
+            // Move from minimum questions to extra questions
+            if self.stage == Stage::Done && !self.minimum_set_reached {
+                self.minimum_set_reached = true;
+                // Reset the stage for asking extra questions
+                self.stage = Stage::first();
+                // Inform user we're done min question set
+                status = Some(QuestionStatus::AllMandatoryQuestionsAnswered(self.stage));
+
+                // Now give the first regular question
+                let regular_question = self.get_regular_question();
+                if let Some(ignored_status) = regular_question.1 {
+                    println!("Warning, ignored status message {:?}", ignored_status);
+                }
+                return (regular_question.0, status);
+            }
+
+            // Populate queue based on the stage and min questions asked
+            self.populate_min_set_queue();
+        }
+
+        (self.min_set_question_queue.pop(), status)
+    }
+
+    pub fn get_next_question(&mut self) -> (Option<Question>, Option<QuestionStatus>) {
         // If there's still a current question, then it's being skipped, perform skipping logic
         if let Some(current_question) = self.current_question {
             // Add the current question to the skipped questions list
@@ -387,7 +398,7 @@ impl<'a> PlayerRank<'a> {
                 let replacement = self.get_skip_replacement();
 
                 if let Some(replacement) = replacement {
-                    self.question_queue.push(replacement);
+                    self.min_set_question_queue.push(replacement);
                 } else {
                     // Report error status to user, no questions left
                     return (None, Some(QuestionStatus::AllQuestionsSkipped));
@@ -397,33 +408,14 @@ impl<'a> PlayerRank<'a> {
             self.current_question = None;
         }
 
-        // Check if we need to populate the queue
-        if self.question_queue.is_empty() {
-            // Move to the next stage
-            self.stage = self.stage.next();
+        // Status update for the caller
+        let status;
 
-            // If we're done, we're not starting a new stage, otherwise update
-            // user on the new stage
-            status = match self.stage {
-                Stage::Done => None,
-                _ => Some(QuestionStatus::StartingStage(self.stage)),
-            };
-
-            // Move from minimum questions to extra questions
-            if self.stage == Stage::Done && !self.minimum_set_reached {
-                self.minimum_set_reached = true;
-                // Reset the stage for asking extra questions
-                self.stage = Stage::first();
-                // Inform user we're done min question set
-                status = Some(QuestionStatus::AllMandatoryQuestionsAnswered(self.stage));
-            }
-
-            // Populate queue based on the stage and min questions asked
-            self.populate_queue();
-        }
-
-        // Set the current question
-        self.current_question = self.question_queue.pop();
+        // Get the next question
+        (self.current_question, status) = match self.minimum_set_reached {
+            true => self.get_regular_question(),
+            false => self.get_min_set_question(),
+        };
 
         // Return the current question to the user
         (Question::from_opt_refq(&self.current_question), status)
@@ -436,7 +428,7 @@ impl<'a> PlayerRank<'a> {
             } else {
                 // Empty the question queue. The next time a question is requested, it'll move to
                 // the next section to refill the queue
-                self.question_queue.clear();
+                self.min_set_question_queue.clear();
                 Ok(())
             }
         } else {

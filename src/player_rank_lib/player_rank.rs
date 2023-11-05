@@ -229,9 +229,7 @@ impl<'a> PlayerRank<'a> {
         }
     }
 
-    // When a question gets skipped, find a question to replace it while maintaining the requirements of a fully connected graph
-    fn get_skip_replacement(&self) -> Option<RefQuestion<'a>> {
-        // TODO: Remove this, split out handling skipping other stages
+    fn get_skip_replacement_position(&self) -> Option<RefQuestion<'a>> {
         let pos = match self.stage {
             Stage::Position(pos) => pos,
             _ => return None,
@@ -312,6 +310,59 @@ impl<'a> PlayerRank<'a> {
         // Choose a random one and add it to the upcoming list
         let rand = rand::random::<usize>() % potential_replacements.len();
         Some(potential_replacements[rand])
+    }
+
+    fn get_skip_replacement_self_rating(&self) -> Option<RefQuestion<'a>> {
+        // Make sure we're in the right stage
+        if self.stage != Stage::SelfRating {
+            return None;
+        }
+
+        // Make sure there's a question being skipped
+        let curr_q = if let Some(curr_q) = self.current_question {
+            curr_q
+        } else {
+            return None;
+        };
+
+        // Shuffle up the players
+        let player_list = self.get_shuffled_player_list();
+
+        // There's one possible replacement question for each player.
+        // Try each player, make sure it hasn't been skipped already
+        for player in player_list {
+            // The potential replacement question for the skipped question
+            let potential_question = RefQuestion {
+                player1: player,
+                pos1: curr_q.pos1,
+                player2: player,
+                pos2: curr_q.pos2,
+            };
+
+            // If we've already answered this question
+            if self.answered_questions.contains_key(&Stage::SelfRating)
+                && self.answered_questions[&Stage::SelfRating].contains(&potential_question) {
+                continue;
+            }
+
+            // If we've already skipped this question
+            if self.skipped_questions.contains_key(&Stage::SelfRating)
+                && self.skipped_questions[&Stage::SelfRating].contains(&potential_question) {
+                // Keep looking for another question
+                continue;
+            }
+            return Some(potential_question);
+        }
+        None
+    }
+
+    // When a question gets skipped, find a question to replace it while maintaining the requirements of a fully connected graph
+    fn get_skip_replacement(&self) -> Option<RefQuestion<'a>> {
+        match self.stage {
+            Stage::Position(_) => self.get_skip_replacement_position(),
+            Stage::SelfRating => self.get_skip_replacement_self_rating(),
+            Stage::Done => None,
+        }
     }
 
     pub fn get_next_question(&mut self) -> (Option<Question>, Option<QuestionStatus>) {

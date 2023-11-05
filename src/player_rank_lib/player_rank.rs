@@ -14,6 +14,7 @@ pub struct PlayerRank<'a> {
     // Queue of questions ready to be asked
     question_queue: Vec<Question>,
     current_question: Option<Question>,
+    skipped_questions: Vec<Question>,
 }
 
 #[derive(Debug)]
@@ -21,6 +22,7 @@ pub enum QuestionStatus {
     StartingStage(Stage),
     // Need to pass the stage back because this coincides with starting a new stage regretably
     AllMandatoryQuestionsAnswered(Stage), // TODO: This is just a connection level of 1. Are there other statuses we'd pass back?
+    AllQuestionsSkipped,
     ConnectionLevelReached(i32),
 }
 
@@ -76,6 +78,7 @@ impl<'a> PlayerRank<'a> {
             minimum_set_reached: false,
             question_queue: Vec::new(),
             current_question: None,
+            skipped_questions: Vec::new(),
         };
 
         // Populate queue based on the stage and min questions asked
@@ -190,9 +193,36 @@ impl<'a> PlayerRank<'a> {
         }
     }
 
+    // When a pair gets skipped, find a pair to replace it while maintaining the requirements of a fully connected graph
+    fn get_skip_replacement(&self) -> Option<Question> {
+        None
+    }
+
     pub fn get_next_question(&mut self) -> (Option<Question>, Option<QuestionStatus>) {
         // Status update for the caller
         let mut status: Option<QuestionStatus> = None;
+
+        // If there's still a current question, then it's being skipped, perform skipping logic
+        if let Some(current_question) = &self.current_question {
+            // Add the current question to the skipped questions list
+            self.skipped_questions.push(current_question.clone());
+
+            // Only perform skip replacement if we're determining the minimum set
+            if !self.minimum_set_reached{
+                // Figure out the replacement
+                let replacement = self.get_skip_replacement();
+
+                if let Some(replacement) = replacement {
+                    self.question_queue.push(replacement);
+                }
+                else{
+                    // Report error status to user, no questions left
+                    return (None, Some(QuestionStatus::AllQuestionsSkipped));
+                }
+            }
+
+            self.current_question = None;
+        }
 
         // Check if we need to populate the queue
         if self.question_queue.is_empty() {

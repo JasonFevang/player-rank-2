@@ -487,11 +487,11 @@ impl<'a> PlayerRank<'a> {
         // Update user on how connected the graph is
         // This is sorta like a confidence measure
         let status = {
-            if !self.minimum_linkage.contains_key(&self.stage) {
-                self.minimum_linkage.insert(self.stage, 0);
-            }
-
             let min_linkage = self.minimum_linkage[&self.stage];
+
+            if !self.minimum_linkage.contains_key(&self.stage) {
+                self.minimum_linkage.insert(self.stage, min_linkage);
+            }
 
             if min_linkage != min_links {
                 // Update the minimum linkage

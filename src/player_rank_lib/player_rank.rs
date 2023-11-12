@@ -466,11 +466,29 @@ impl<'a> PlayerRank<'a> {
     }
 
     fn get_regular_question(&mut self) -> (Option<RefQuestion<'a>>, Option<QuestionStatus>) {
-        // List all remaining questions
-        let remaining_questions = match self.stage {
-            Stage::Position(_) => self.list_remaining_questions_position(),
-            Stage::SelfRating => self.list_remaining_questions_self_rating(),
-            Stage::Done => Vec::new(),
+        let mut status = None;
+
+        let remaining_questions = loop {
+            // List all remaining questions
+            let remaining_questions = match self.stage {
+                Stage::Position(_) => self.list_remaining_questions_position(),
+                Stage::SelfRating => self.list_remaining_questions_self_rating(),
+                Stage::Done => Vec::new(),
+            };
+
+            if remaining_questions.is_empty() {
+                // Move to the next stage!
+                self.stage = self.stage.next();
+
+                // If we're done, we're not starting a new stage, otherwise update
+                // user on the new stage
+                match self.stage {
+                    Stage::Done => return (None, None),
+                    _ => status = Some(QuestionStatus::StartingStage(self.stage)),
+                }
+                continue;
+            }
+            break remaining_questions;
         };
 
         // Find minimum linked question in the list
@@ -486,7 +504,7 @@ impl<'a> PlayerRank<'a> {
 
         // Update user on how connected the graph is
         // This is sorta like a confidence measure
-        let status = {
+        let connection_level_status = {
             if !self.minimum_linkage.contains_key(&self.stage) {
                 self.minimum_linkage.insert(self.stage, min_links);
             }
@@ -502,6 +520,11 @@ impl<'a> PlayerRank<'a> {
                 None
             }
         };
+
+        // Prioritize new stage status over connection level status
+        if status.is_none(){
+            status = connection_level_status;
+        }
 
         (min_question, status)
     }

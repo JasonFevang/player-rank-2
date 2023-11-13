@@ -6,7 +6,7 @@ use std::fs;
 use std::io;
 
 mod cli_file_io;
-mod player_rank_lib;
+pub mod player_rank_lib;
 
 // The triple-slash comments can be read by Rust's procedural macros and are used to populate the help message. That's  crazy
 /// This command is used to determine relative player rankings through a series of questions comparing two players' abilities. Provide a list of player's names to begin

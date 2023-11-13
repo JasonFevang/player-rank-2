@@ -1,7 +1,7 @@
 use crate::player_rank_lib::*;
 use anyhow::Result;
-use rand::{seq::SliceRandom, Rng, SeedableRng};
 use rand::rngs::StdRng;
+use rand::{seq::SliceRandom, Rng, SeedableRng};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
@@ -19,7 +19,7 @@ pub struct PlayerRank<'a> {
     answered_questions: HashMap<Stage, Vec<RefQuestion<'a>>>,
     minimum_linkage: HashMap<Stage, usize>,
     // Used for randomizing question order
-    rng : rand::rngs::StdRng,
+    rng: rand::rngs::StdRng,
 }
 
 #[derive(PartialEq, Copy, Clone)]
@@ -103,13 +103,13 @@ pub enum ResponseError {
 }
 
 impl<'a> PlayerRank<'a> {
-    pub fn new(players: &'a Players, questions: &'a mut Questions, seed : Option<u64>) -> Self {
+    pub fn new(players: &'a Players, questions: &'a mut Questions, seed: Option<u64>) -> Self {
         // TODO: Handle non-empty question files, or at least make this nicer
         if !questions.questions.is_empty() {
             panic!("I cannot handle non-empty question files");
         }
 
-        let rng = match seed{
+        let rng = match seed {
             Some(s) => StdRng::seed_from_u64(s),
             None => StdRng::from_entropy(),
         };
@@ -529,7 +529,7 @@ impl<'a> PlayerRank<'a> {
         };
 
         // Prioritize new stage status over connection level status
-        if status.is_none(){
+        if status.is_none() {
             status = connection_level_status;
         }
 

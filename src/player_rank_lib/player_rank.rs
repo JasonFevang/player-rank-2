@@ -55,7 +55,7 @@ impl Question {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum QuestionStatus {
     StartingStage(Stage),
     // Need to pass the stage back because this coincides with starting a new stage regretably
@@ -74,12 +74,12 @@ pub enum Stage {
 
 impl Stage {
     // The first stage in the ordering
-    fn first() -> Self {
+    pub fn first() -> Self {
         Stage::Position(Position::Atk)
     }
 
     // The stages have an ordering. This method defines that ordering
-    fn next(&self) -> Self {
+    pub fn next(&self) -> Self {
         match self {
             Stage::Position(pos) => match pos {
                 Position::Atk => Stage::Position(Position::Def),

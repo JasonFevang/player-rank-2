@@ -114,7 +114,7 @@ impl<'a> PlayerRank<'a> {
             None => StdRng::from_entropy(),
         };
 
-        let mut res = PlayerRank {
+        PlayerRank {
             players,
             questions,
             stage: Stage::first(),
@@ -125,12 +125,7 @@ impl<'a> PlayerRank<'a> {
             answered_questions: HashMap::new(),
             minimum_linkage: HashMap::new(),
             rng,
-        };
-
-        // Populate queue based on the stage and min questions asked
-        res.populate_min_set_queue();
-
-        res
+        }
     }
 
     fn get_shuffled_player_list(&mut self) -> Vec<&'a Player> {
@@ -540,8 +535,15 @@ impl<'a> PlayerRank<'a> {
         let mut status = None;
 
         if self.min_set_question_queue.is_empty() {
-            // Move to the next stage
-            self.stage = self.stage.next();
+
+            // If no questions have been asked, this is our first time through. Go to the first stage
+            self.stage = if self.skipped_questions.is_empty() && self.answered_questions.is_empty()
+            {
+                Stage::first()
+            } else {
+                // Move to the next stage
+                self.stage.next()
+            };
 
             // If we're done, we're not starting a new stage, otherwise update
             // user on the new stage

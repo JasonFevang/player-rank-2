@@ -1,7 +1,7 @@
 use crate::player_rank_lib::*;
 use anyhow::Result;
-use rand::seq::SliceRandom;
-use rand::thread_rng;
+use rand::{seq::SliceRandom, Rng, SeedableRng};
+use rand::rngs::StdRng;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
@@ -18,6 +18,8 @@ pub struct PlayerRank<'a> {
     skipped_questions: HashMap<Stage, Vec<RefQuestion<'a>>>,
     answered_questions: HashMap<Stage, Vec<RefQuestion<'a>>>,
     minimum_linkage: HashMap<Stage, usize>,
+    // Used for randomizing question order
+    rng : rand::rngs::StdRng,
 }
 
 #[derive(PartialEq, Copy, Clone)]
@@ -101,11 +103,16 @@ pub enum ResponseError {
 }
 
 impl<'a> PlayerRank<'a> {
-    pub fn new(players: &'a Players, questions: &'a mut Questions) -> Self {
+    pub fn new(players: &'a Players, questions: &'a mut Questions, seed : Option<u64>) -> Self {
         // TODO: Handle non-empty question files, or at least make this nicer
         if !questions.questions.is_empty() {
             panic!("I cannot handle non-empty question files");
         }
+
+        let rng = match seed{
+            Some(s) => StdRng::seed_from_u64(s),
+            None => StdRng::from_entropy(),
+        };
 
         let mut res = PlayerRank {
             players,
@@ -117,6 +124,7 @@ impl<'a> PlayerRank<'a> {
             skipped_questions: HashMap::new(),
             answered_questions: HashMap::new(),
             minimum_linkage: HashMap::new(),
+            rng,
         };
 
         // Populate queue based on the stage and min questions asked
@@ -125,14 +133,14 @@ impl<'a> PlayerRank<'a> {
         res
     }
 
-    fn get_shuffled_player_list(&self) -> Vec<&'a Player> {
+    fn get_shuffled_player_list(&mut self) -> Vec<&'a Player> {
         // Create shuffled list of all players
         let mut player_list: Vec<&Player> = Vec::new();
         for player in &self.players.players {
             player_list.push(&player);
         }
-        let mut rng = thread_rng();
-        player_list.shuffle(&mut rng);
+
+        player_list.shuffle(&mut self.rng);
         player_list
     }
 
@@ -147,8 +155,7 @@ impl<'a> PlayerRank<'a> {
         }
 
         // Shuffle those pairs
-        let mut rng = thread_rng();
-        pairs.shuffle(&mut rng);
+        pairs.shuffle(&mut self.rng);
 
         let mut temp_questions = Vec::new(); // Temporary vector to collect questions
 
@@ -284,7 +291,7 @@ impl<'a> PlayerRank<'a> {
         Some(potential_replacements[rand])
     }
 
-    fn get_skip_replacement_self_rating(&self) -> Option<RefQuestion<'a>> {
+    fn get_skip_replacement_self_rating(&mut self) -> Option<RefQuestion<'a>> {
         // Make sure we're in the right stage
         if self.stage != Stage::SelfRating {
             return None;
@@ -331,7 +338,7 @@ impl<'a> PlayerRank<'a> {
     }
 
     // When a question gets skipped, find a question to replace it while maintaining the requirements of a fully connected graph
-    fn get_skip_replacement(&self) -> Option<RefQuestion<'a>> {
+    fn get_skip_replacement(&mut self) -> Option<RefQuestion<'a>> {
         match self.stage {
             Stage::Position(_) => self.get_skip_replacement_position(),
             Stage::SelfRating => self.get_skip_replacement_self_rating(),
@@ -359,7 +366,7 @@ impl<'a> PlayerRank<'a> {
         left_cnt + right_cnt
     }
 
-    fn list_remaining_questions_position(&self) -> Vec<RefQuestion<'a>> {
+    fn list_remaining_questions_position(&mut self) -> Vec<RefQuestion<'a>> {
         let pos = match self.stage {
             Stage::Position(pos) => pos,
             _ => return Vec::new(),
@@ -402,11 +409,11 @@ impl<'a> PlayerRank<'a> {
         }
 
         // Shuffle up the remaing questions
-        remaining_questions.shuffle(&mut thread_rng());
+        remaining_questions.shuffle(&mut self.rng);
         remaining_questions
     }
 
-    fn list_remaining_questions_self_rating(&self) -> Vec<RefQuestion<'a>> {
+    fn list_remaining_questions_self_rating(&mut self) -> Vec<RefQuestion<'a>> {
         let player_list = self.get_shuffled_player_list();
 
         // Go through all the possible questions, and filter out the ones we've answered or skipped already
@@ -460,7 +467,7 @@ impl<'a> PlayerRank<'a> {
         }
 
         // Shuffle up all the questions
-        remaining_questions.shuffle(&mut thread_rng());
+        remaining_questions.shuffle(&mut self.rng);
 
         remaining_questions
     }

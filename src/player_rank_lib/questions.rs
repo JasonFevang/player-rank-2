@@ -25,7 +25,7 @@ impl Position {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Question {
     pub player1: String,
     pub pos1: Position,

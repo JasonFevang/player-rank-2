@@ -69,6 +69,7 @@ fn ask_question(question: &player_rank_lib::Question) {
 }
 
 fn get_response() -> Result<UserResponse> {
+    return Ok(UserResponse::Value(1.0));
     loop {
         let mut input = String::new();
 
@@ -165,7 +166,7 @@ pub fn run(args: Cli) -> Result<()> {
     }
 
     // Create a PlayerRank object that handles figuring out what questions to ask and creating the ranking
-    let mut player_rank = player_rank_lib::PlayerRank::new(&players, &mut questions);
+    let mut player_rank = player_rank_lib::PlayerRank::new(&players, &mut questions, None);
 
     // Run the routine of asking the user questions and parsing responses
     let ranks = run_ranking(&mut player_rank)?;
